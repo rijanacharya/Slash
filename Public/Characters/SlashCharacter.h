@@ -29,6 +29,10 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void Jump() override;
 
+	UFUNCTION(BlueprintCallable)
+	void SetWeaponCollisionEnable(ECollisionEnabled::Type CollisionEnabled);
+
+
 
 protected:
 	virtual void BeginPlay() override;
@@ -67,14 +71,14 @@ protected:
 	/**
 	 * Play Montage Function
 	 * */
-	void PlayEquipMontage();
 	void PlayDodgeMontage();
 	void PlayAttackMontage();
+	void PlayEquipMontage(const FName& SectionName);
+
 
 	UFUNCTION(BlueprintCallable)
 	void AttackEnd();
 	bool  CanAttack();
-	void PlayEquipMontage(FName SectionName);
 	bool CanDisarm();
 	bool CanArm();
 
