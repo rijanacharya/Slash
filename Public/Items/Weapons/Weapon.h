@@ -26,6 +26,8 @@ protected:
 	UFUNCTION()
 	void OnBoxOverlap( UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
+	UFUNCTION(BlueprintImplementableEvent)
+	void CreateFields(const FVector& FieldLocation);
 private:
 	UPROPERTY(EditAnywhere, Category="Weapon Properties")
 	USoundBase* EquipSound;
@@ -42,6 +44,7 @@ private:
 
 public:
 	FORCEINLINE UBoxComponent* GetWeaponBox() const { return WeaponBox; }
+	// ReSharper disable once CppUE4ProbableMemoryIssuesWithUObjectsInContainer
 	TArray<AActor*> IgnoreActors;
 
 };

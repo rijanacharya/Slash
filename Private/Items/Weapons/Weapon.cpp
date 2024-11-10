@@ -74,7 +74,8 @@ void AWeapon::OnSphereEndOverlap(UPrimitiveComponent* OverlappedComponent, AActo
 
 void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp,
 	int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
-{ const FVector Start = BoxTraceStart->GetComponentLocation();
+{
+	const FVector Start = BoxTraceStart->GetComponentLocation();
 	const  FVector End = BoxTraceEnd->GetComponentLocation();
 
 	TArray<AActor*> ActorsToIgnore;
@@ -95,7 +96,7 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
 		ETraceTypeQuery::TraceTypeQuery1,
 		false,
 		ActorsToIgnore,
-		EDrawDebugTrace::ForDuration,
+		EDrawDebugTrace::None,
 		BoxHit,
 		true
 	);
@@ -105,9 +106,9 @@ void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Oth
 		 IHitInterface * HitInterface = Cast<IHitInterface>(BoxHit.GetActor());
 	 	if (HitInterface)
 		 {
-	 		HitInterface->GetHit(BoxHit.ImpactPoint);
-
+	 		HitInterface->Execute_GetHit(BoxHit.GetActor(), BoxHit.ImpactPoint);
 		 }
 	 	IgnoreActors.AddUnique(BoxHit.GetActor());
+	 	CreateFields(BoxHit.ImpactPoint);
 	 }
 }

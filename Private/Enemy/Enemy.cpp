@@ -1,5 +1,4 @@
 
-
 #include "Enemy/Enemy.h"
 #include"Components/SkeletalMeshComponent.h"
 #include"Components/CapsuleComponent.h"
@@ -50,9 +49,9 @@ void AEnemy::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 }
 
 
-void AEnemy::GetHit(const FVector& ImpactPoint)
+void AEnemy::GetHit_Implementation(const FVector& ImpactPoint)
 {
-	DRAW_SPHERE_COLOR(ImpactPoint, FColor::Orange);
+	//DRAW_SPHERE_COLOR(ImpactPoint, FColor::Orange);
 
 	DirectionalHitReact(ImpactPoint);
 
@@ -60,6 +59,11 @@ void AEnemy::GetHit(const FVector& ImpactPoint)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, HitSound, ImpactPoint);
 	}
+	if(HitParticles)
+	{
+		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), HitParticles, GetTransform());
+	}
+	
 }
 
 void AEnemy::DirectionalHitReact(const FVector& ImpactPoint)
@@ -102,12 +106,12 @@ void AEnemy::DirectionalHitReact(const FVector& ImpactPoint)
 	PlayHitReactMontage(Section);
 
 
-	if (GEngine)
+	/*if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, FString::Printf(TEXT("Angle: %f"), Angle));
 		UKismetSystemLibrary::DrawDebugArrow(GetWorld(), GetActorLocation(), GetActorLocation() + Forward * 100.0f, 5.0f, FColor::Green, 10.0f, 1.0f);
 		UKismetSystemLibrary::DrawDebugArrow(GetWorld(), GetActorLocation(), GetActorLocation() + ToHit * 100.0f, 5.0f, FColor::Red, 10.0f, 1.0f);
 		UKismetSystemLibrary::DrawDebugArrow(GetWorld(), GetActorLocation(), GetActorLocation() + CrossProduct * 100.0f, 5.0f, FColor::Blue, 10.0f, 1.0f);
-	}
+	}*/
 }
 
