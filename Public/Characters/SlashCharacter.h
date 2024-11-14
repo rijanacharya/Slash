@@ -3,12 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/Character.h"
+#include "BaseCharacter.h"
 #include "InputActionValue.h"
 #include "CharacterTypes.h"
 #include "SlashCharacter.generated.h"
 
-class AWeapon;
 class UInputAction;
 class USpringArmComponent;
 class UCameraComponent;
@@ -19,7 +18,7 @@ class UAnimMontage;
 
 
 UCLASS()
-class SLASH_API ASlashCharacter : public ACharacter
+class SLASH_API ASlashCharacter : public ABaseCharacter
 {
 	GENERATED_BODY()
 
@@ -29,9 +28,7 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	virtual void Jump() override;
 
-	UFUNCTION(BlueprintCallable)
-	void SetWeaponCollisionEnable(ECollisionEnabled::Type CollisionEnabled);
-
+	
 
 
 protected:
@@ -66,19 +63,16 @@ protected:
 	void Look(const FInputActionValue& Value);
 	void Equip(const  FInputActionValue& Value);
 	void Dodge(const  FInputActionValue& Value);
-	void Attack(const  FInputActionValue& Value);
+	void Attack(const  FInputActionValue& Value) ;
 
 	/**
 	 * Play Montage Function
 	 * */
-	void PlayDodgeMontage();
-	void PlayAttackMontage();
+	virtual void PlayAttackMontage() override;
+	virtual void AttackEnd() override;
+	virtual bool  CanAttack() override;
+
 	void PlayEquipMontage(const FName& SectionName);
-
-
-	UFUNCTION(BlueprintCallable)
-	void AttackEnd();
-	bool  CanAttack();
 	bool CanDisarm();
 	bool CanArm();
 
@@ -120,14 +114,8 @@ private:
 	UAnimMontage* EquipMontage;
 	UPROPERTY(EditDefaultsOnly, Category = Monatages)
 	UAnimMontage* DodgeMontage;
-	UPROPERTY(EditDefaultsOnly, Category = Monatages)
-	UAnimMontage* AttackMontage;
-
-	/**
-	 * 
-	 */
-	// ReSharper disable once CppUE4ProbableMemoryIssuesWithUObject
-	AWeapon* EquippedWeapon;
+	
+	
 	
 
 public:

@@ -8,7 +8,6 @@
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include "Components/InputComponent.h"
-#include "Components/BoxComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/LocalPlayer.h"
 #include "GroomComponent.h"
@@ -48,6 +47,7 @@ ASlashCharacter::ASlashCharacter()
 void ASlashCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	Tags.Add(FName("SlashCharacter"));
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
 		if(UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
@@ -248,13 +248,6 @@ void ASlashCharacter::Jump()
 	Super::Jump();
 }
 
-void ASlashCharacter::SetWeaponCollisionEnable(ECollisionEnabled::Type CollisionEnabled)
-{
-	if (EquippedWeapon && EquippedWeapon->GetWeaponBox())
-	{
-		EquippedWeapon->IgnoreActors.Empty();
-		EquippedWeapon->GetWeaponBox()->SetCollisionEnabled(CollisionEnabled);
-	}
-}
+
 
 

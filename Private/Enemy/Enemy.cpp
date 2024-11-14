@@ -1,11 +1,17 @@
 
 #include "Enemy/Enemy.h"
-
 #include "Components/AttributeComponent.h"
 #include"Components/SkeletalMeshComponent.h"
 #include"Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "HUD/HealthBarComponent.h"
+#include "Perception/PawnSensingComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "AIController.h"
+#include "Characters/SlashCharacter.h"
+#include "Navigation/PathFollowingComponent.h"
+
+#include "Slash/DebugMacros.h"
 
 AEnemy::AEnemy()
 {
@@ -17,10 +23,19 @@ AEnemy::AEnemy()
 
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
 
-	Attributes = CreateDefaultSubobject<UAttributeComponent>(TEXT("Attributes"));
 
 	HealthBarWidget = CreateDefaultSubobject<UHealthBarComponent>(TEXT("HealthBarWidget"));
 	HealthBarWidget->SetupAttachment(GetRootComponent());
+
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationRoll = false;
+	bUseControllerRotationYaw = false;
+
+	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
+	PawnSensing->SightRadius =5000.f;
+	PawnSensing->SetPeripheralVisionAngle(50.f);
+	
 
 
 }
@@ -32,19 +47,17 @@ void AEnemy::BeginPlay()
 	{
 		HealthBarWidget->SetVisibility(false);
 	}
-	
+	EnemyController =  Cast<AAIController>(GetController());
+	MoveToTarget(PatrolTarget);
+
+	if (PawnSensing)
+	{
+		PawnSensing->OnSeePawn.AddDynamic(this, &AEnemy::PawnSeen);
+	}
 	
 }
 
-void AEnemy::PlayHitReactMontage(const FName& SectionName)
-{
-	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-	if (AnimInstance && HitReactMontage)
-	{
-		AnimInstance->Montage_Play(HitReactMontage);
-		AnimInstance->Montage_JumpToSection(SectionName, HitReactMontage);
-	}
-}
+
 
 void AEnemy::Die()
 {
@@ -56,6 +69,63 @@ void AEnemy::Die()
 		HealthBarWidget->SetVisibility(false);
 	}
 	SetLifeSpan(10.f);
+}
+
+bool AEnemy::InTargetRange(AActor* Target, double Radius)
+{
+	if (Target == nullptr) return false;
+	const double DistanceToTarget =  (Target->GetActorLocation()-GetActorLocation()).Size();
+
+	return DistanceToTarget <= Radius;
+
+}
+
+void AEnemy::MoveToTarget(AActor* Target)
+{
+	if (EnemyController == nullptr || Target == nullptr) return;
+	FAIMoveRequest  MoveRequest;
+	MoveRequest.SetGoalActor(Target);
+	MoveRequest.SetAcceptanceRadius(15.f);
+	EnemyController->MoveTo(MoveRequest);
+	
+}
+
+AActor* AEnemy::ChoosePatrolTarget()
+{
+	TArray<AActor*> ValidTarget;
+	for (AActor* Target : PatrolTargets)
+	{
+		if (Target != PatrolTarget)
+		{
+			ValidTarget.Add(Target);
+		}
+	}
+	if(ValidTarget.Num() > 0)
+	{
+		return ValidTarget[FMath::RandRange(0, ValidTarget.Num() - 1)];
+	}
+	return nullptr;
+}
+
+
+void AEnemy::PawnSeen(APawn* SeenPawn)
+{
+	if (EnemyState ==EEnemyState::EES_Chasing) return;
+	if (SeenPawn->ActorHasTag(FName("SlashCharacter")))
+	{
+		GetWorldTimerManager().ClearTimer(PatrolTimer);
+		GetCharacterMovement()->MaxWalkSpeed = ChasingSpeed;
+		CombatTarget = SeenPawn;
+		if (EnemyState != EEnemyState::EES_Attacking)
+		{
+			EnemyState = EEnemyState::EES_Chasing;
+			MoveToTarget(CombatTarget);
+		}
+		
+
+
+	}
+		
 }
 
 void AEnemy::PlayDeathMontage()
@@ -103,22 +173,63 @@ void AEnemy::PlayDeathMontage()
 	
 }
 
+void AEnemy::PatrolTimerFinished()
+{
+	MoveToTarget(PatrolTarget);
+}
+
+void AEnemy::CheckCombatTarget()
+{
+	if (!InTargetRange(CombatTarget, CombatRadius))
+	{
+		//outside combat radius loose interest
+		CombatTarget = nullptr;
+		if (HealthBarWidget)
+		{
+			HealthBarWidget->SetVisibility(false);
+		}
+		EnemyState = EEnemyState::EES_Patrolling;
+		GetCharacterMovement()->MaxWalkSpeed = PatrollingSpeed;
+		MoveToTarget(PatrolTarget);
+
+	}
+	else if (!InTargetRange(CombatTarget, AttackRadius) && EnemyState != EEnemyState::EES_Chasing)
+	{
+		//outside attack range chase character
+		EnemyState = EEnemyState::EES_Chasing;
+		GetCharacterMovement()->MaxWalkSpeed = ChasingSpeed;
+		MoveToTarget(CombatTarget);
+	}
+	else if (InTargetRange(CombatTarget , AttackRadius) && EnemyState  != EEnemyState::EES_Attacking)
+	{
+		//within attack range attack
+		EnemyState = EEnemyState::EES_Attacking;
+		//GetCharacterMovement()->MaxWalkSpeed = 0.f;
+		//PlayAttackMontage();
+	}
+}
+
+void AEnemy::CheckPatrolTarget()
+{
+	if(InTargetRange(PatrolTarget, PatrolRadius))
+	{
+		PatrolTarget = ChoosePatrolTarget();
+		float WaitTime = FMath::RandRange(PatrolWaitMin, PatrolWaitMax);
+		GetWorldTimerManager().SetTimer(PatrolTimer, this, &AEnemy::PatrolTimerFinished, WaitTime);
+
+	}
+}
+
 void AEnemy::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	if (CombatTarget)
+	if (EnemyState > EEnemyState::EES_Patrolling)
 	{
-		const double DistanceToTarget =  (CombatTarget->GetActorLocation()-GetActorLocation()).Size();
-		if (DistanceToTarget > CombatRadius)
-		{
-			CombatTarget = nullptr;
-			if (HealthBarWidget)
-			{
-				HealthBarWidget->SetVisibility(false);
-			}
-		}
+		CheckCombatTarget();
 	}
+	
+	CheckPatrolTarget();
 
 }
 
@@ -165,48 +276,11 @@ float AEnemy::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEv
 		HealthBarWidget->SetHealthPercent(Attributes->GetHealthPercent());
 	}
 	CombatTarget = EventInstigator->GetPawn();
+	GetWorldTimerManager().ClearTimer(PatrolTimer);
+	EnemyState = EEnemyState::EES_Chasing;
+	GetCharacterMovement()->MaxWalkSpeed = ChasingSpeed;
+	MoveToTarget(CombatTarget);
 	return DamageAmount;
 }
 
-void AEnemy::DirectionalHitReact(const FVector& ImpactPoint)
-{
-	const  FVector Forward = GetActorForwardVector();
-	const  FVector ImpactLower(ImpactPoint.X, ImpactPoint.Y, GetActorLocation().Z);
-	const FVector ToHit = (ImpactLower - GetActorLocation()).GetSafeNormal();
-	//Forward * ToHit = |forward| |ToHit| * cos(theta)
-	// both are unit vector so magnitude is 1 , so forward * ToHit = cos(theta)
-	// Acos is inverse cosine or also known as arc-cosine
-	// default angle is in Radians so we are converting it to degree 
-	float Angle = FMath::RadiansToDegrees(FMath::Acos(FVector::DotProduct(Forward, ToHit)));
-
-	// if cross product face down then angle should be negative
-	const FVector CrossProduct = FVector::CrossProduct(Forward, ToHit);
-	if (CrossProduct.Z < 0.0f)
-	{
-		Angle *= -1.0f;
-	}
-
-	FName Section("FromBack");
-	//if angle is between -45 and 45 then it is from front
-	if (Angle >= -45 && Angle <= 45)
-	{
-		Section = FName("FromFront");
-	}
-	else if (Angle >= -135 && Angle <= -45)
-	{
-		Section = FName("FromLeft");
-	}
-	else if (Angle >= 45 && Angle <= 135)
-	{
-		Section = FName("FromRight");
-	}
-	
-
-
-
-	
-	PlayHitReactMontage(Section);
-
-	
-}
 
