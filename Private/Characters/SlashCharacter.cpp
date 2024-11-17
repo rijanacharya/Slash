@@ -14,6 +14,9 @@
 #include "Items/Item.h"
 #include "Items/Weapons/Weapon.h"
 #include "Animation/AnimMontage.h"
+#include "Components/AttributeComponent.h"
+#include "HUD/SlashHUD.h"
+#include "HUD/SlashOverlay.h"
 
 
 ASlashCharacter::ASlashCharacter()
@@ -27,6 +30,12 @@ ASlashCharacter::ASlashCharacter()
 	GetCharacterMovement()->bOrientRotationToMovement =true;
 	GetCharacterMovement()->RotationRate = FRotator(0,400,0);
 
+	GetMesh()->SetCollisionObjectType(ECollisionChannel::ECC_WorldDynamic);
+	GetMesh()->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Block);
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECollisionResponse::ECR_Overlap);
+	GetMesh()->SetGenerateOverlapEvents(true);
+	
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 300.0f;
@@ -59,22 +68,36 @@ void ASlashCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	
 }
 
+
+
 void ASlashCharacter::Jump()
 {
-	Super::Jump();
+	if (IsUnoccupied())
+		Super::Jump();
+}
+
+void ASlashCharacter::GetHit_Implementation(const FVector& ImpactPoint , AActor* Hitter)
+{
+	Super::GetHit_Implementation(ImpactPoint, Hitter);
+	if (Attributes && Attributes->GetHealthPercent() > 0.0f)
+		ActionState = EActionState::EAS_HitReaction;
+	
+}
+
+float ASlashCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+                                  class AController* EventInstigator, AActor* DamageCauser)
+{
+	HandleDamage(DamageAmount);
+	SetHUDHealth();
+	return DamageAmount;
 }
 
 void ASlashCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	Tags.Add(FName("SlashCharacter"));
-	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
-	{
-		if(UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(SlashMappingContext,0);
-		}
-	}
+	Tags.Add(FName("EngageableTarget"));
+	
+	InitializeOverlayAndInput();
 	
 }
 
@@ -151,6 +174,8 @@ void ASlashCharacter::EquipWeapon(AWeapon* Weapon)
 	OverlappingItem = nullptr;
 }
 
+
+
 void ASlashCharacter::AttackEnd()
 {
 	ActionState = EActionState::EAS_Unoccupied;
@@ -190,6 +215,13 @@ void ASlashCharacter::Arm()
 	ActionState = EActionState::EAS_EquippingWeapon;
 }
 
+void ASlashCharacter::Die()
+{
+	Super::Die();
+	ActionState = EActionState::EAS_Dead;
+	DisableMeshCollision();
+}
+
 void ASlashCharacter::AttachWeaponToBack()
 {
 	if(EquippedWeapon)
@@ -221,7 +253,46 @@ void ASlashCharacter::FinishEquipping()
 	
 }
 
+void ASlashCharacter::HitReactEnd()
+{
+	ActionState = EActionState::EAS_Unoccupied;
+}
+
+bool ASlashCharacter::IsUnoccupied()
+{
+	return ActionState == EActionState::EAS_Unoccupied;
+}
+
+void ASlashCharacter::InitializeOverlayAndInput()
+{
+	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
+	{
+		if(UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+		{
+			Subsystem->AddMappingContext(SlashMappingContext,0);
+		}
+
+		ASlashHUD* SlashHUD = Cast<ASlashHUD>(PlayerController->GetHUD());
+		if(SlashHUD)
+		{
+			 SlashOverlay = SlashHUD->GetSlashOverlay();
+			if(SlashOverlay && Attributes)
+			{
+				SlashOverlay->SetHealthBarPercent(Attributes->GetHealthPercent());
+				SlashOverlay->SetStaminaBarPercent(.5f);
+				SlashOverlay->SetGold(0);
+				SlashOverlay->SetSouls(0);
+				
+			}
+		}
+	}
+}
 
 
-
-
+void ASlashCharacter::SetHUDHealth()
+{
+	if (SlashOverlay && Attributes)
+	{
+		SlashOverlay->SetHealthBarPercent(Attributes->GetHealthPercent());
+	}
+}

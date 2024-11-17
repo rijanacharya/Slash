@@ -55,8 +55,10 @@ float AEnemy::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEv
 {
 	HandleDamage(DamageAmount);
 	CombatTarget = EventInstigator->GetPawn();
-	ChaseTarget();
-	//	GetWorldTimerManager().ClearTimer(PatrolTimer);
+	if(IsInsideAttackRadius())
+		EnemyState = EEnemyState::EES_Attacking;
+	else if (IsOutsideAttackRadius())
+		ChaseTarget();
 	return DamageAmount;
 }
 
@@ -69,16 +71,12 @@ void AEnemy::Destroyed()
 }
 
 
-void AEnemy::GetHit_Implementation(const FVector& ImpactPoint)
+void AEnemy::GetHit_Implementation(const FVector& ImpactPoint , AActor* Hitter)
 {
-	ShowHealthBar();
-	if (isAlive())
-		DirectionalHitReact(ImpactPoint);
-	else
-		Die();
-
-	PlayHitSound(ImpactPoint);
-	SpawnHitParticles(ImpactPoint);
+	Super::GetHit_Implementation(ImpactPoint , Hitter);
+	if (!IsDead()) ShowHealthBar();
+	ClearPatrolTimer();
+	ClearAttackTimer();
 }
 
 void AEnemy::BeginPlay()
@@ -87,18 +85,20 @@ void AEnemy::BeginPlay()
 	if (PawnSensing)
 		PawnSensing->OnSeePawn.AddDynamic(this, &AEnemy::PawnSeen);
 	InitializeEnemy();
+	Tags.Add(FName("Enemy"));
 	
 }
 
 void AEnemy::Die()
 {
+	Super::Die();
 	EnemyState = EEnemyState::EES_Dead;
-	PlayDeathMontage();
 	ClearAttackTimer();
 	DisableCapsule();
 	HideHealthBar();
 	SetLifeSpan(DeathLifeSpan);
 	GetCharacterMovement()->bOrientRotationToMovement = false;
+	SetWeaponCollisionEnable(ECollisionEnabled::NoCollision);
 }
 
 bool AEnemy::CanAttack()
@@ -118,16 +118,6 @@ void AEnemy::AttackEnd()
 	CheckCombatTarget();
 }
 
-int32 AEnemy::PlayDeathMontage()
-{
-	const int32 Selection = Super::PlayDeathMontage();
-	TEnumAsByte<EDeathPose> Pose(Selection);
-	if ( Pose < EDeathPose::EDP_MAX)
-	{
-		DeathPose = Pose;
-	}
-	return Selection;
-}
 
 void AEnemy::HandleDamage(float DamageAmount)
 {
@@ -289,7 +279,7 @@ void AEnemy::MoveToTarget(AActor* Target)
 	if (EnemyController == nullptr || Target == nullptr) return;
 	FAIMoveRequest  MoveRequest;
 	MoveRequest.SetGoalActor(Target);
-	MoveRequest.SetAcceptanceRadius(50.f);
+	MoveRequest.SetAcceptanceRadius(80.f);
 	EnemyController->MoveTo(MoveRequest);
 	
 }
@@ -313,6 +303,11 @@ AActor* AEnemy::ChoosePatrolTarget()
 
 void AEnemy::Attack() // I am not inheriting cause of enhanced input 
 {
+	if (CombatTarget && CombatTarget->ActorHasTag(FName("Dead")))
+	{
+		CombatTarget = nullptr;
+		return;
+	}
 	EnemyState = EEnemyState::EES_Engaged;
 	PlayAttackMontage();
 }
@@ -323,7 +318,8 @@ void AEnemy::PawnSeen(APawn* SeenPawn)
 		EnemyState != EEnemyState::EES_Dead &&
 		EnemyState != EEnemyState::EES_Chasing &&
 		EnemyState < EEnemyState::EES_Attacking &&
-		SeenPawn->ActorHasTag(FName("SlashCharacter"));
+		SeenPawn->ActorHasTag(FName("EngageableTarget")) &&
+		!SeenPawn->ActorHasTag(FName("Dead"));
 	if (bShouldChaseTarget)
 	{
 		ClearPatrolTimer();
